@@ -2,6 +2,9 @@ from fastapi import FastAPI, HTTPException
 import pandas as pd
 import os
 
+url: str = "https://rfhfjcrdxfofgycpirkv.supabase.co"
+key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmaGZqY3JkeGZvZmd5Y3Bpcmt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE4MzkzNDIsImV4cCI6MjA1NzQxNTM0Mn0.XNcm1ZEMoDacqKGR-397eoJr_bvmiX6TN_JaJrHmmd8"
+
 app = FastAPI()
 
 CSV_FILE = "quiz_questions.csv"

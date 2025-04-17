@@ -1,55 +1,58 @@
 from fastapi import FastAPI, HTTPException
-import pandas as pd
-import os
+from pydantic import BaseModel
+from typing import List
+from supabase import create_client, Client
 
-url: str = "https://rfhfjcrdxfofgycpirkv.supabase.co"
-key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmaGZqY3JkeGZvZmd5Y3Bpcmt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE4MzkzNDIsImV4cCI6MjA1NzQxNTM0Mn0.XNcm1ZEMoDacqKGR-397eoJr_bvmiX6TN_JaJrHmmd8"
+url = "https://rfhfjcrdxfofgycpirkv.supabase.co" 
+key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmaGZqY3JkeGZvZmd5Y3Bpcmt2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDE4MzkzNDIsImV4cCI6MjA1NzQxNTM0Mn0.XNcm1ZEMoDacqKGR-397eoJr_bvmiX6TN_JaJrHmmd8"
+supabase: Client = create_client(url, key)
 
 app = FastAPI()
 
-CSV_FILE = "quiz_questions.csv"
+class QuizQuestion(BaseModel):
+    id: int
+    type: str
+    difficulty: str
+    category: str
+    question: str
+    correct_answer: str
+    
+@app.get("/")
+def root():
+    return {"message": "Trivia Quiz API using Supabase!"}
 
-def load_data():
-    if os.path.exists(CSV_FILE):
-        return pd.read_csv(CSV_FILE)
-    else:
-        df = pd.DataFrame(columns=["id", "type", "difficulty", "category", "question", "correct_answer"])
-        df.to_csv(CSV_FILE, index=False)
-        return df
+@app.get("/questions/", response_model=List[QuizQuestion])
 
-def save_data(df):
-    df.to_csv(CSV_FILE, index=False)
-    return df
-
-@app.get("/questions")
 def get_all_questions():
-    df = load_data()
-    return df.to_dict(orient="records")
+    response = supabase.table("quiz_questions").select("*").execute()
+    return response.data
 
-@app.post("/questions")
-def create_question(type: str, difficulty: str, category: str, question: str, correct_answer: str):
-    df = load_data()
-    new_id = int(df["id"].max()) + 1 if not df.empty else 1
-    df.loc[len(df)] = [new_id, type, difficulty, category, question, correct_answer]
-    save_data(df)
-    return {"id": new_id, "question": question}
 
-@app.put("/questions/{question_id}")
-def update_question(question_id: int, type: str, difficulty: str, category: str, question: str, correct_answer: str):
-    df = load_data()
-    if question_id not in df["id"].values:
+@app.get("/questions/{question_id}", response_model=QuizQuestion)
+def get_question(question_id: int):
+    response = supabase.table("quiz_questions").select("*").eq("ID", question_id).single().execute()
+    if response.data:
+        return response.data
+    raise HTTPException(status_code=404, detail="Question not found")
+
+@app.post("/questions/", response_model=QuizQuestion)
+def create_question(q: QuizQuestion):
+    existing = supabase.table("quiz_questions").select("ID").eq("ID", q.id).execute()
+    if existing.data:
+        raise HTTPException(status_code=400, detail="Question ID already exists")
+    response = supabase.table("quiz_questions").insert(q.dict()).execute()
+    return response.data[0]
+
+@app.put("/questions/{question_id}", response_model=QuizQuestion)
+def update_question(question_id: int, q: QuizQuestion):
+    response = supabase.table("quiz_questions").update(q.dict()).eq("ID", question_id).execute()
+    if not response.data:
         raise HTTPException(status_code=404, detail="Question not found")
-    df.loc[df["id"] == question_id, ["type", "difficulty", "category", "question", "correct_answer"]] = [
-        type, difficulty, category, question, correct_answer
-    ]
-    save_data(df)
-    return {"message": "Question updated successfully"}
+    return response.data[0]
 
 @app.delete("/questions/{question_id}")
 def delete_question(question_id: int):
-    df = load_data()
-    if question_id not in df["id"].values:
+    response = supabase.table("quiz_questions").delete().eq("ID", question_id).execute()
+    if not response.data:
         raise HTTPException(status_code=404, detail="Question not found")
-    df = df[df["id"] != question_id]
-    save_data(df)
-    return {"message": "Question deleted successfully"}
+    return {"message": "Question deleted", "question": response.data[0]}
